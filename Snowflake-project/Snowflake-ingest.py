@@ -1,6 +1,29 @@
 import snowflake.connector
 import pandas as pd
 import argparse
+import os 
+from pyarrow import *
+import requests
+from snowflake.sqlalchemy import URL
+from sqlalchemy import create_engine
+from pandas.io import sql
+#method#2- sqlalchemy connection to connect snowflake
+
+
+engine = create_engine(URL(
+    account = 'uwb81215',
+    user = 'MAHESH1011',
+    password = '1234@Home',
+    database = 'DEMO_DB',
+    warehouse = 'TESTWH',
+    schema ='public',
+    role='ACCOUNTADMIN'
+    
+))
+
+conn = engine.connect()
+
+
 
 #Method #1 to connect with snowflake
 def main(params):
@@ -12,12 +35,36 @@ def main(params):
         database='DEMO_DB',   
         
     )
-
     
 # Query to test connection
+    
+df = con.cursor().execute("select * from customer_detail").fetch_pandas_all()
+print(df.head(0))
 
-    df = con.cursor().execute("select * from customer_detail").fetch_pandas_all()
-    print(df)
+
+#reading parquet file from web url and download 
+url = input()
+response = requests.head(url)
+if response.status_code == 200:
+    os.system(f"curl {url} -o output.parquet")
+else:
+    print("file is not avilable on below link :", '\n {url}')
+
+
+# reading parquet file from weblink and load into snowflake table using sqlalchemy connection
+
+df = pd.read_parquet(url,engine ='pyarrow')
+df.tpep_pickup_datetime = pd.to_datetime(df.tpep_pickup_datetime)
+df.tpep_dropoff_datetime = pd.to_datetime(df.tpep_dropoff_datetime)
+print("File contain total row:{}".format(len(df)))
+print("Do you want to append data in existing table:")
+selection = input().upper()
+if selection=='Y':
+    df.to_sql(name='yello_taxi', con=conn, if_exists='append',index =False , chunksize = 16000)
+else:
+    df.to_sql(name='yello_taxi', con=conn, if_exists='replace' ,index =False , chunksize = 16000)
+
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ingest CSV data to Postgres')
